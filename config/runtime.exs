@@ -127,6 +127,29 @@ secure_cookie =
 
 oidc_issuer = get_var_from_path_or_env(config_dir, "OIDC_ISSUER", "https://accounts.google.com")
 
+oidc_document_overrides =
+  get_var_from_path_or_env(config_dir, "OIDC_DOC_OVERRIDE", nil)
+  |> case do
+    nil ->
+      %{}
+
+    json ->
+      case Jason.decode(json) do
+        {:ok, map} when is_map(map) ->
+          map
+
+        _ ->
+          raise "OIDC_DOC_OVERRIDE must be a JSON object"
+      end
+  end
+
+oidc_provider_configuration_opts =
+  if oidc_document_overrides == %{} do
+    %{}
+  else
+    %{quirks: %{document_overrides: oidc_document_overrides}}
+  end
+
 oidc_client_id = get_var_from_path_or_env(config_dir, "OIDC_CLIENT_ID", nil)
 oidc_client_secret = get_var_from_path_or_env(config_dir, "OIDC_CLIENT_SECRET", nil)
 oidc_scopes = get_var_from_path_or_env(config_dir, "OIDC_SCOPES", "openid email profile")
@@ -166,6 +189,7 @@ languages =
 config :claper, :oidc,
   enabled: oidc_enabled,
   issuer: oidc_issuer,
+  provider_configuration_opts: oidc_provider_configuration_opts,
   client_id: oidc_client_id,
   client_secret: oidc_client_secret,
   scopes: String.split(oidc_scopes, " "),

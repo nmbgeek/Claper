@@ -112,7 +112,7 @@ defmodule Claper.MixProject do
       {:jose, "~> 1.11"},
       {:req, "~> 0.5"},
       {:uuid, "~> 1.1"},
-      {:oidcc, "~> 3.5"},
+      {:oidcc, "~> 3.7"},
       {:oban, "~> 2.19"},
       {:mua, "~> 0.2"},
       {:mail, "~> 0.5"},
