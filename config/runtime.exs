@@ -85,6 +85,7 @@ smtp_ssl = get_var_from_path_or_env(config_dir, "SMTP_SSL", "true") |> String.to
 smtp_tls = get_var_from_path_or_env(config_dir, "SMTP_TLS", "always")
 smtp_auth = get_var_from_path_or_env(config_dir, "SMTP_AUTH", "always")
 smtp_port = get_int_from_path_or_env(config_dir, "SMTP_PORT", 25)
+smtp_middlebox_comp_mode = get_var_from_path_or_env(config_dir, "SMTP_MIDDLEBOX_COMP_MODE", "false") |> String.to_existing_atom()
 
 storage = get_var_from_path_or_env(config_dir, "PRESENTATION_STORAGE", "local")
 if storage not in ["local", "s3"], do: raise("Invalid PRESENTATION_STORAGE value #{storage}")
@@ -224,25 +225,31 @@ config :claper, ClaperWeb.MailboxGuard,
 
 case mail_transport do
   "smtp" ->
-    config :claper, Claper.Mailer,
+    smtp_config = [
       adapter: Swoosh.Adapters.Mua,
       relay: smtp_relay,
-      port: smtp_port
+      port: smtp_port,
+      ssl: [
+        middlebox_comp_mode: smtp_middlebox_comp_mode
+      ]
+    ]
 
-    cond do
-      smtp_username && smtp_password ->
-        config :claper, Claper.Mailer, auth: [username: smtp_username, password: smtp_password]
+    smtp_config =
+      cond do
+        smtp_username && smtp_password ->
+          Keyword.put(smtp_config, :auth, username: smtp_username, password: smtp_password)
 
-      smtp_username || smtp_password ->
-        raise ArgumentError, """
-        Both SMTP_USERNAME and SMTP_PASSWORD must be set for SMTP authentication.
-        Please provide values for both environment variables.
-        """
+        smtp_username || smtp_password ->
+          raise ArgumentError, """
+          Both SMTP_USERNAME and SMTP_PASSWORD must be set for SMTP authentication.
+          Please provide values for both environment variables.
+          """
 
-      true ->
-        nil
-    end
+        true ->
+          smtp_config
+      end
 
+    config :claper, Claper.Mailer, smtp_config
     config :swoosh, :api_client, false
 
   "postmark" ->
