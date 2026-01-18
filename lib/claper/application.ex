@@ -9,6 +9,7 @@ defmodule Claper.Application do
   def start(_type, _args) do
     topologies = Application.get_env(:libcluster, :topologies) || []
     oidc_config = Application.get_env(:claper, :oidc) || []
+    oidc_provider_configuration_opts = oidc_config[:provider_configuration_opts] || %{}
     Oban.Telemetry.attach_default_logger()
 
     children = [
@@ -27,7 +28,7 @@ defmodule Claper.Application do
       {Finch, name: Swoosh.Finch},
       {Task.Supervisor, name: Claper.TaskSupervisor},
       {Oidcc.ProviderConfiguration.Worker,
-       %{issuer: oidc_config[:issuer], name: Claper.OidcProviderConfig}},
+       %{issuer: oidc_config[:issuer], name: Claper.OidcProviderConfig, provider_configuration_opts: oidc_provider_configuration_opts}},
       {Oban, Application.fetch_env!(:claper, Oban)}
     ]
 
