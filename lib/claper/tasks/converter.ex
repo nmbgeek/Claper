@@ -28,11 +28,19 @@ defmodule Claper.Tasks.Converter do
         "#{hash}"
       ])
 
-    IO.puts("Starting conversion for #{hash}... (copy: #{is_copy})")
+    require Logger
+    Logger.info("Starting conversion for #{hash}... (copy: #{is_copy})")
 
-    file_to_pdf(String.to_atom(ext), path, file)
-    |> pdf_to_jpg(path, presentation, user_id)
-    |> jpg_upload(hash, path, presentation, user_id, is_copy)
+    try do
+      file_to_pdf(String.to_atom(ext), path, file)
+      |> pdf_to_jpg(path, presentation, user_id)
+      |> jpg_upload(hash, path, presentation, user_id, is_copy)
+    rescue
+      error ->
+        Logger.error("Conversion failed for #{hash}: #{inspect(error)}")
+        Logger.error(Exception.format(:error, error, __STACKTRACE__))
+        failure(presentation, path, user_id)
+    end
   end
 
   @doc """
@@ -58,7 +66,10 @@ defmodule Claper.Tasks.Converter do
   end
 
   defp file_to_pdf(:ppt, path, file) do
-    Porcelain.exec(
+    require Logger
+    Logger.info("Converting PPT to PDF: #{path}/#{file}")
+
+    result = Porcelain.exec(
       get_libreoffice_binary(),
       [
         "--headless",
@@ -70,10 +81,16 @@ defmodule Claper.Tasks.Converter do
         "#{path}/#{file}"
       ]
     )
+
+    Logger.info("PPT to PDF conversion result: status=#{result.status}, out=#{result.out}")
+    result
   end
 
   defp file_to_pdf(:pptx, path, file) do
-    Porcelain.exec(
+    require Logger
+    Logger.info("Converting PPTX to PDF: #{path}/#{file}")
+
+    result = Porcelain.exec(
       get_libreoffice_binary(),
       [
         "--headless",
@@ -85,14 +102,19 @@ defmodule Claper.Tasks.Converter do
         "#{path}/#{file}"
       ]
     )
+
+    Logger.info("PPTX to PDF conversion result: status=#{result.status}, out=#{result.out}")
+    result
   end
 
   defp file_to_pdf(_ext, _path, _file), do: %Result{status: 0}
 
   defp pdf_to_jpg(%Result{status: 0}, path, _presentation, _user_id) do
+    require Logger
     resolution = get_resolution()
+    Logger.info("Converting PDF to JPG: #{path}/original.pdf (resolution: #{resolution})")
 
-    Porcelain.exec(
+    result = Porcelain.exec(
       "gs",
       [
         "-sDEVICE=png16m",
@@ -103,14 +125,21 @@ defmodule Claper.Tasks.Converter do
         "#{path}/original.pdf"
       ]
     )
+
+    Logger.info("PDF to JPG conversion result: status=#{result.status}")
+    result
   end
 
   defp pdf_to_jpg(_result, path, presentation, user_id) do
+    require Logger
+    Logger.error("PDF to JPG conversion failed - previous step returned non-zero status")
     failure(presentation, path, user_id)
   end
 
   defp jpg_upload(%Result{status: 0}, hash, path, presentation, user_id, is_copy) do
+    require Logger
     files = Path.wildcard("#{path}/*.jpg")
+    Logger.info("Found #{length(files)} JPG files to upload")
 
     # assign new hash to avoid cache issues
     new_hash = :erlang.phash2("#{hash}-#{System.system_time(:second)}")
@@ -151,10 +180,15 @@ defmodule Claper.Tasks.Converter do
   end
 
   defp jpg_upload(_result, _hash, path, presentation, user_id, _is_copy) do
+    require Logger
+    Logger.error("JPG upload failed - previous step returned non-zero status")
     failure(presentation, path, user_id)
   end
 
   defp success(presentation, path, hash, length, user_id) do
+    require Logger
+    Logger.info("Conversion successful for presentation #{presentation.id}: hash=#{hash}, length=#{length}")
+
     with {:ok, presentation} <-
            Claper.Presentations.update_presentation_file(presentation, %{
              "hash" => "#{hash}",
@@ -168,6 +202,9 @@ defmodule Claper.Tasks.Converter do
   end
 
   defp failure(presentation, path, user_id) do
+    require Logger
+    Logger.error("Marking presentation #{presentation.id} as failed")
+
     with {:ok, presentation} <-
            Claper.Presentations.update_presentation_file(presentation, %{
              "status" => "fail"
